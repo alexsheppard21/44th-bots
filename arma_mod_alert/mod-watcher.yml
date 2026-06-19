@@ -1,0 +1,37 @@
+name: Arma Mod Update Watcher
+
+on:
+  schedule:
+    - cron: '0 * * * *'  # every hour on the hour
+  workflow_dispatch:       # allow manual trigger from GitHub UI
+
+jobs:
+  check-mods:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install dependencies
+        run: pip install requests
+
+      - name: Run mod watcher
+        env:
+          DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
+        run: python mod-watcher/bot.py --once
+
+      - name: Commit updated state
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add mod-watcher/mod_state.json
+          git diff --cached --quiet || git commit -m "chore: update mod state [skip ci]"
+          git push
