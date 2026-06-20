@@ -2,6 +2,6 @@
   "_comment": "Copy this to config.json and fill in your values. config.json is gitignored.",
   "discord_webhook_url": "",
   "poll_interval_minutes": 60,
-  "preset_file": "modern_milsim.html",
+  "preset_file": "modlist.html",
   "alert_role_id": "1163818961859784755"
 }
