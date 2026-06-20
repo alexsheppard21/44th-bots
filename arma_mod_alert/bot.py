@@ -166,7 +166,7 @@ def save_state(state: dict):
 
 # ── Core poll ─────────────────────────────────────────────────────────────────
 def poll(config: dict):
-    webhook_url = os.environ.get("DISCORD_WEBHOOK_URL") or config.get("discord_webhook_url", "")
+    webhook_url = os.environ.get("DISCORD_WEBHOOK_URL", "")
     role_id     = config.get("alert_role_id", "")
 
     if not webhook_url:
