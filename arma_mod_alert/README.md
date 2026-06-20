@@ -27,11 +27,11 @@ Edit `config.json`:
   "discord_webhook_url": "https://discord.com/api/webhooks/...",
   "poll_interval_minutes": 60,
   "preset_file": "your_preset.html",
-  "server_address": "123.456.789.0:2302"
+  "alert_role_id": ""
 }
 ```
 
-`server_address` is optional — if set, each alert includes a **Join on Steam** link. Use your server's IP and game port (default `2302`).
+`alert_role_id` is optional — if set, the bot will tag that role in each alert. Leave blank to disable.
 
 **3. Install dependencies**
 
