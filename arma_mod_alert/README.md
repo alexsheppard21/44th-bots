@@ -51,12 +51,11 @@ python bot.py
 
 ## GitHub Actions (automated hourly checks)
 
-The workflow in `mod-watcher.yml` runs the bot every hour via GitHub Actions so you don't need a server.
+The workflow at `.github/workflows/mod-watcher.yml` runs the bot every hour via GitHub Actions so you don't need a server.
 
-1. Copy `mod-watcher.yml` to `.github/workflows/mod-watcher.yml` in your repo
-2. Go to your repo → **Settings** → **Secrets and variables** → **Actions** → **New repository secret**
-3. Name: `DISCORD_WEBHOOK_URL`, value: your webhook URL
-4. Push — the workflow will trigger on schedule and can also be run manually from the Actions tab
+1. Go to your repo → **Settings** → **Secrets and variables** → **Actions** → **New repository secret**
+2. Name: `DISCORD_WEBHOOK_URL`, value: your webhook URL
+3. Push — the workflow will trigger on schedule and can also be run manually from the Actions tab
 
 The workflow commits `mod_state.json` and `pending_deletes.json` back to the repo after each run to persist state.
 
