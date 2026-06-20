@@ -32,7 +32,7 @@ jobs:
         run: |
           git config user.name  "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
+          git pull --rebase origin main
           git add arma_mod_alert/mod_state.json arma_mod_alert/pending_deletes.json
           git diff --cached --quiet || git commit -m "chore: update mod state [skip ci]"
-          git pull --rebase origin main
           git push
