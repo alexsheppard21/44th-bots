@@ -19,8 +19,11 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 # ── Config ────────────────────────────────────────────────────────────────────
-CONFIG_FILE = Path(__file__).parent / "config.json"
-STATE_FILE  = Path(__file__).parent / "mod_state.json"
+CONFIG_FILE  = Path(__file__).parent / "config.json"
+STATE_FILE   = Path(__file__).parent / "mod_state.json"
+PENDING_FILE = Path(__file__).parent / "pending_deletes.json"
+
+DELETE_AFTER_SECONDS = 7 * 24 * 60 * 60  # 1 week
 
 logging.basicConfig(
     level=logging.INFO,
@@ -62,8 +65,15 @@ def fetch_mod_details(mod_ids: list[str]) -> list[dict]:
         return []
 
 # ── Discord ───────────────────────────────────────────────────────────────────
-def post_discord_alert(webhook_url: str, mod: dict, old_ts: int, new_ts: int):
-    """Send a rich embed to Discord for a mod update."""
+def parse_webhook(webhook_url: str) -> tuple[str, str]:
+    """Extract (webhook_id, webhook_token) from a webhook URL."""
+    match = re.search(r'/webhooks/(\d+)/([^/?]+)', webhook_url)
+    if not match:
+        raise ValueError(f"Could not parse webhook URL: {webhook_url}")
+    return match.group(1), match.group(2)
+
+def post_discord_alert(webhook_url: str, mod: dict, old_ts: int, new_ts: int, server_address: str, role_id: str = "") -> str | None:
+    """Send a rich embed to Discord for a mod update. Returns the message ID."""
     mod_id  = mod["publishedfileid"]
     title   = mod.get("title", f"Mod {mod_id}")
     url     = f"https://steamcommunity.com/sharedfiles/filedetails/?id={mod_id}"
@@ -71,15 +81,23 @@ def post_discord_alert(webhook_url: str, mod: dict, old_ts: int, new_ts: int):
     old_dt  = datetime.fromtimestamp(old_ts, tz=timezone.utc).strftime("%d %b %Y %H:%M UTC") if old_ts else "Unknown"
     new_dt  = datetime.fromtimestamp(new_ts, tz=timezone.utc).strftime("%d %b %Y %H:%M UTC")
 
+    fields = [
+        {"name": "Previous update", "value": old_dt, "inline": True},
+        {"name": "New update",      "value": new_dt, "inline": True},
+        {"name": "Workshop page",   "value": f"[Open on Steam]({url})", "inline": False},
+    ]
+    if server_address:
+        fields.append({
+            "name": "Server",
+            "value": f"[Join on Steam](steam://connect/{server_address})",
+            "inline": False,
+        })
+
     embed = {
         "title": f"🔔 Mod Updated: {title}",
         "url": url,
         "color": 0xF4A300,
-        "fields": [
-            {"name": "Previous update", "value": old_dt, "inline": True},
-            {"name": "New update",      "value": new_dt, "inline": True},
-            {"name": "Workshop page",   "value": f"[Open on Steam]({url})", "inline": False},
-        ],
+        "fields": fields,
         "footer": {"text": "44th Arma Mod Watcher"},
         "timestamp": datetime.now(tz=timezone.utc).isoformat(),
     }
@@ -87,11 +105,61 @@ def post_discord_alert(webhook_url: str, mod: dict, old_ts: int, new_ts: int):
         embed["thumbnail"] = {"url": preview}
 
     try:
-        r = requests.post(webhook_url, json={"embeds": [embed]}, timeout=10)
+        payload = {"embeds": [embed]}
+        if role_id:
+            payload["content"] = f"<@&{role_id}>"
+
+        # ?wait=true makes Discord return the created message so we can grab its ID
+        r = requests.post(webhook_url + "?wait=true", json=payload, timeout=10)
         r.raise_for_status()
-        log.info(f"  → Discord alerted for '{title}'")
+        message_id = r.json()["id"]
+        log.info(f"  → Discord alerted for '{title}' (message {message_id})")
+        return message_id
     except Exception as e:
         log.error(f"Discord webhook error: {e}")
+        return None
+
+def delete_discord_message(webhook_id: str, webhook_token: str, message_id: str):
+    url = f"https://discord.com/api/webhooks/{webhook_id}/{webhook_token}/messages/{message_id}"
+    try:
+        r = requests.delete(url, timeout=10)
+        if r.status_code == 404:
+            log.info(f"  Message {message_id} already deleted")
+        else:
+            r.raise_for_status()
+            log.info(f"  Deleted message {message_id}")
+    except Exception as e:
+        log.error(f"Discord delete error for message {message_id}: {e}")
+
+# ── Pending deletes ───────────────────────────────────────────────────────────
+def load_pending() -> dict:
+    if PENDING_FILE.exists():
+        return json.loads(PENDING_FILE.read_text())
+    return {}
+
+def save_pending(pending: dict):
+    PENDING_FILE.write_text(json.dumps(pending, indent=2))
+
+def process_pending_deletes(webhook_url: str):
+    pending = load_pending()
+    if not pending:
+        return
+
+    try:
+        webhook_id, webhook_token = parse_webhook(webhook_url)
+    except ValueError as e:
+        log.error(e)
+        return
+
+    now = int(datetime.now(tz=timezone.utc).timestamp())
+    due = [msg_id for msg_id, delete_at in pending.items() if now >= delete_at]
+
+    for msg_id in due:
+        delete_discord_message(webhook_id, webhook_token, msg_id)
+        del pending[msg_id]
+
+    if due:
+        save_pending(pending)
 
 # ── State helpers ─────────────────────────────────────────────────────────────
 def load_state() -> dict:
@@ -104,14 +172,20 @@ def save_state(state: dict):
 
 # ── Core poll ─────────────────────────────────────────────────────────────────
 def poll(config: dict):
-    webhook_url = os.environ.get("DISCORD_WEBHOOK_URL") or config.get("discord_webhook_url", "")
+    webhook_url    = os.environ.get("DISCORD_WEBHOOK_URL") or config.get("discord_webhook_url", "")
+    server_address = config.get("server_address", "")
+    role_id        = config.get("alert_role_id", "")
+
     if not webhook_url:
         log.error("No Discord webhook URL set. Add DISCORD_WEBHOOK_URL env var or set it in config.json.")
         return
 
+    process_pending_deletes(webhook_url)
+
     preset_path = Path(__file__).parent / config["preset_file"]
     mod_ids = load_preset(preset_path)
     state   = load_state()
+    pending = load_pending()
 
     log.info(f"Polling {len(mod_ids)} mod(s)…")
     details = fetch_mod_details(mod_ids)
@@ -128,13 +202,17 @@ def poll(config: dict):
                 log.info(f"  First seen: '{title}' — storing baseline, no alert sent")
             else:
                 log.info(f"  UPDATED: '{title}' — {old_ts} → {new_ts}")
-                post_discord_alert(webhook_url, mod, old_ts, new_ts)
+                msg_id = post_discord_alert(webhook_url, mod, old_ts, new_ts, server_address, role_id)
+                if msg_id:
+                    delete_at = int(datetime.now(tz=timezone.utc).timestamp()) + DELETE_AFTER_SECONDS
+                    pending[msg_id] = delete_at
                 updated_count += 1
             state[mid] = new_ts
         else:
             log.info(f"  No change: '{title}'")
 
     save_state(state)
+    save_pending(pending)
     if updated_count == 0:
         log.info("No updates found this cycle.")
 

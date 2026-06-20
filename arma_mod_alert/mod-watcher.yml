@@ -32,6 +32,6 @@ jobs:
         run: |
           git config user.name  "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add mod-watcher/mod_state.json
+          git add mod-watcher/mod_state.json mod-watcher/pending_deletes.json
           git diff --cached --quiet || git commit -m "chore: update mod state [skip ci]"
           git push

@@ -26,9 +26,12 @@ Edit `config.json`:
 {
   "discord_webhook_url": "https://discord.com/api/webhooks/...",
   "poll_interval_minutes": 60,
-  "preset_file": "your_preset.html"
+  "preset_file": "your_preset.html",
+  "server_address": "123.456.789.0:2302"
 }
 ```
+
+`server_address` is optional — if set, each alert includes a **Join on Steam** link. Use your server's IP and game port (default `2302`).
 
 **3. Install dependencies**
 
@@ -56,6 +59,8 @@ The workflow in `mod-watcher.yml` runs the bot every hour via GitHub Actions so 
 
 The workflow commits `mod_state.json` back to the repo after each run to persist the last-seen update timestamps.
 
-## State file
+## State files
 
 `mod_state.json` tracks the last known update timestamp for each mod ID. On first run, mods are baselined with no alert sent; subsequent updates trigger a Discord notification.
+
+`pending_deletes.json` tracks posted alert message IDs and their scheduled deletion time. Each alert is automatically deleted from Discord after 7 days.
