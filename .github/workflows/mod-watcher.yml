@@ -34,9 +34,10 @@ jobs:
         run: |
           git config user.name  "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git pull --rebase origin main
+          git fetch origin main
           git add arma_mod_alert/mod_state.json arma_mod_alert/pending_deletes.json
           if ! git diff --cached --quiet; then
             git commit -m "chore: update mod state [skip ci]"
+            git rebase origin/main
             git push
           fi
