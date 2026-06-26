@@ -72,7 +72,7 @@ def parse_webhook(webhook_url: str) -> tuple[str, str]:
         raise ValueError(f"Could not parse webhook URL: {webhook_url}")
     return match.group(1), match.group(2)
 
-def post_discord_alert(webhook_url: str, mod: dict, old_ts: int, new_ts: int, role_id: str = "") -> str | None:
+def post_discord_alert(webhook_url: str, mod: dict, old_ts: int, new_ts: int, alert_message: str = "") -> str | None:
     """Send a rich embed to Discord for a mod update. Returns the message ID."""
     mod_id  = mod["publishedfileid"]
     title   = mod.get("title", f"Mod {mod_id}")
@@ -100,8 +100,8 @@ def post_discord_alert(webhook_url: str, mod: dict, old_ts: int, new_ts: int, ro
 
     try:
         payload = {"embeds": [embed]}
-        if role_id:
-            payload["content"] = f"<@&{role_id}>"
+        if alert_message:
+            payload["content"] = alert_message
 
         # ?wait=true makes Discord return the created message so we can grab its ID
         r = requests.post(webhook_url + "?wait=true", json=payload, timeout=10)
@@ -167,7 +167,7 @@ def save_state(state: dict):
 # ── Core poll ─────────────────────────────────────────────────────────────────
 def poll(config: dict):
     webhook_url = os.environ.get("DISCORD_WEBHOOK_URL", "")
-    role_id     = config.get("alert_role_id", "")
+    alert_message = config.get("alert_message", "")
 
     if not webhook_url:
         log.error("No Discord webhook URL set. Add DISCORD_WEBHOOK_URL env var or set it in config.json.")
@@ -195,7 +195,7 @@ def poll(config: dict):
                 log.info(f"  First seen: '{title}' — storing baseline, no alert sent")
             else:
                 log.info(f"  UPDATED: '{title}' — {old_ts} → {new_ts}")
-                msg_id = post_discord_alert(webhook_url, mod, old_ts, new_ts, role_id)
+                msg_id = post_discord_alert(webhook_url, mod, old_ts, new_ts, alert_message)
                 if msg_id:
                     delete_at = int(datetime.now(tz=timezone.utc).timestamp()) + DELETE_AFTER_SECONDS
                     pending[msg_id] = delete_at

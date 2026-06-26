@@ -1,5 +1,5 @@
 {
   "poll_interval_minutes": 60,
   "preset_file": "modlist.html",
-  "alert_role_id": "1163818961859784755"
+  "alert_message": "Please update this mod on the server."
 }
